@@ -60,3 +60,21 @@ def test_create_item_no_tax():
     assert data["name"] == "Simple Item"
     assert data["price"] == 5.0
     assert "price_with_tax" not in data
+
+
+def test_read_all_items():
+    """Test getting all items."""
+    # Create a few items first
+    item1 = {"name": "Item 1", "price": 10.0}
+    item2 = {"name": "Item 2", "price": 20.0, "tax": 2.0}
+    
+    client.post("/items/", json=item1)
+    client.post("/items/", json=item2)
+    
+    # Get all items
+    response = client.get("/items/")
+    assert response.status_code == 200
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
+    assert isinstance(data["items"], list)

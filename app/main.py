@@ -15,6 +15,10 @@ class Item(BaseModel):
     tax: float | None = None
 
 
+# In-memory storage for demonstration
+items_db: list[Item] = []
+
+
 @app.get("/")
 async def root():
     """Root endpoint returning a welcome message."""
@@ -33,9 +37,16 @@ async def read_item(item_id: int, q: str | None = None):
     return {"item_id": item_id, "q": q}
 
 
+@app.get("/items/")
+async def read_items():
+    """Get all items."""
+    return {"items": items_db, "total": len(items_db)}
+
+
 @app.post("/items/")
 async def create_item(item: Item):
     """Create a new item."""
+    items_db.append(item)
     item_dict = item.model_dump()
     if item.tax:
         price_with_tax = item.price + item.tax
