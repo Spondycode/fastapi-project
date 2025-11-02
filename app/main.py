@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.db import init_db, get_db
 from app.models import Post
+from app.images import upload_to_imagekit
 
 
 @asynccontextmanager
@@ -93,22 +94,13 @@ async def upload_file(
     caption: str | None = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload a file and create a post record."""
-    # Create uploads directory if it doesn't exist
-    upload_dir = Path("uploads")
-    upload_dir.mkdir(exist_ok=True)
+    """Upload a file to ImageKit and create a post record."""
+    # Upload to ImageKit
+    upload_result = await upload_to_imagekit(file)
     
-    # Use original filename
-    file_path = upload_dir / file.filename
-    
-    # Save file
-    contents = await file.read()
-    with open(file_path, "wb") as f:
-        f.write(contents)
-    
-    # Create database record
+    # Create database record with ImageKit URL
     new_post = Post(
-        url=str(file_path),
+        url=upload_result.url,
         file_type=file.content_type or "unknown",
         file_name=file.filename,
         caption=caption
@@ -126,3 +118,23 @@ async def upload_file(
         "caption": new_post.caption,
         "created_at": new_post.created_at.isoformat()
     }
+
+
+@app.delete("/items/{item_id}")
+async def delete_item(item_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a specific post by ID."""
+    try:
+        post_uuid = uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+    
+    result = await db.execute(select(Post).where(Post.id == post_uuid))
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    await db.delete(post)
+    await db.commit()
+    
+    return {"message": "Post deleted successfully", "id": str(post_uuid)}
