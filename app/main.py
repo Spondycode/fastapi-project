@@ -1,22 +1,31 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Form
 from pydantic import BaseModel
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+import os
+import uuid
+from pathlib import Path
+
+from app.db import init_db, get_db
+from app.models import Post
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database on startup."""
+    await init_db()
+    yield
+
 
 app = FastAPI(
     title="FastAPI Project",
     description="A simple FastAPI application",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 
-class Item(BaseModel):
-    name: str
-    description: str | None = None
-    price: float
-    tax: float | None = None
-
-
-# In-memory storage for demonstration
-items_db: list[Item] = []
 
 
 @app.get("/")
@@ -32,23 +41,88 @@ async def health_check():
 
 
 @app.get("/items/{item_id}")
-async def read_item(item_id: int, q: str | None = None):
-    """Get an item by ID with optional query parameter."""
-    return {"item_id": item_id, "q": q}
+async def read_item(item_id: str, db: AsyncSession = Depends(get_db)):
+    """Get a specific post by ID."""
+    try:
+        post_uuid = uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+    
+    result = await db.execute(select(Post).where(Post.id == post_uuid))
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    return {
+        "id": str(post.id),
+        "filename": post.file_name,
+        "file_type": post.file_type,
+        "url": post.url,
+        "caption": post.caption,
+        "created_at": post.created_at.isoformat()
+    }
 
 
 @app.get("/items/")
-async def read_items():
-    """Get all items."""
-    return {"items": items_db, "total": len(items_db)}
+async def read_items(db: AsyncSession = Depends(get_db)):
+    """Get all posts from database ordered by creation date (newest first)."""
+    result = await db.execute(select(Post).order_by(Post.created_at.desc()))
+    posts = result.scalars().all()
+    
+    items = [
+        {
+            "id": str(post.id),
+            "filename": post.file_name,
+            "file_type": post.file_type,
+            "url": post.url,
+            "caption": post.caption,
+            "created_at": post.created_at.isoformat()
+        }
+        for post in posts
+    ]
+    
+    return {"items": items, "total": len(items)}
 
 
-@app.post("/items/")
-async def create_item(item: Item):
-    """Create a new item."""
-    items_db.append(item)
-    item_dict = item.model_dump()
-    if item.tax:
-        price_with_tax = item.price + item.tax
-        item_dict.update({"price_with_tax": price_with_tax})
-    return item_dict
+
+
+@app.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    caption: str | None = Form(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """Upload a file and create a post record."""
+    # Create uploads directory if it doesn't exist
+    upload_dir = Path("uploads")
+    upload_dir.mkdir(exist_ok=True)
+    
+    # Use original filename
+    file_path = upload_dir / file.filename
+    
+    # Save file
+    contents = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
+    # Create database record
+    new_post = Post(
+        url=str(file_path),
+        file_type=file.content_type or "unknown",
+        file_name=file.filename,
+        caption=caption
+    )
+    
+    db.add(new_post)
+    await db.commit()
+    await db.refresh(new_post)
+    
+    return {
+        "id": str(new_post.id),
+        "filename": new_post.file_name,
+        "file_type": new_post.file_type,
+        "url": new_post.url,
+        "caption": new_post.caption,
+        "created_at": new_post.created_at.isoformat()
+    }
