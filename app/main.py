@@ -1,4 +1,7 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Form
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,13 +29,63 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Narrow this in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Frontend directory relative to this file (app/main.py)
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+# Mount static assets
+if FRONTEND_DIR.exists():
+    app.mount(
+        "/frontend",
+        StaticFiles(directory=str(FRONTEND_DIR)),
+        name="frontend",
+    )
 
 
 
-@app.get("/")
+
+@app.get("/", include_in_schema=False)
 async def root():
-    """Root endpoint returning a welcome message."""
-    return {"message": "Welcome to FastAPI!"}
+    """Serve the frontend HTML page."""
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return {"message": "Frontend not found. Build and place files in the frontend directory."}
+
+
+@app.get("/index.html", include_in_schema=False)
+async def index_page():
+    """Serve the index page."""
+    index_file = FRONTEND_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    raise HTTPException(status_code=404, detail="Page not found")
+
+
+@app.get("/post.html", include_in_schema=False)
+async def post_page():
+    """Serve the post detail page."""
+    post_file = FRONTEND_DIR / "post.html"
+    if post_file.exists():
+        return FileResponse(str(post_file))
+    raise HTTPException(status_code=404, detail="Page not found")
+
+
+@app.get("/upload.html", include_in_schema=False)
+async def upload_page():
+    """Serve the upload page."""
+    upload_file = FRONTEND_DIR / "upload.html"
+    if upload_file.exists():
+        return FileResponse(str(upload_file))
+    raise HTTPException(status_code=404, detail="Page not found")
 
 
 @app.get("/health")
@@ -117,6 +170,38 @@ async def upload_file(
         "url": new_post.url,
         "caption": new_post.caption,
         "created_at": new_post.created_at.isoformat()
+    }
+
+
+@app.patch("/items/{item_id}")
+async def update_item(
+    item_id: str,
+    caption: str = Form(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a post's caption."""
+    try:
+        post_uuid = uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid UUID format")
+    
+    result = await db.execute(select(Post).where(Post.id == post_uuid))
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    
+    post.caption = caption
+    await db.commit()
+    await db.refresh(post)
+    
+    return {
+        "id": str(post.id),
+        "filename": post.file_name,
+        "file_type": post.file_type,
+        "url": post.url,
+        "caption": post.caption,
+        "created_at": post.created_at.isoformat()
     }
 
 
