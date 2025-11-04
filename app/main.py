@@ -211,7 +211,8 @@ async def read_item(item_id: str, db: AsyncSession = Depends(get_db)):
         "file_type": post.file_type,
         "url": post.url,
         "caption": post.caption,
-        "created_at": post.created_at.isoformat()
+        "created_at": post.created_at.isoformat(),
+        "user_id": str(post.user_id) if post.user_id else None
     }
 
 

@@ -1,8 +1,9 @@
 """Pydantic schemas for request/response models."""
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_serializer
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 
 class UserCreate(BaseModel):
@@ -14,11 +15,16 @@ class UserCreate(BaseModel):
 
 class UserResponse(BaseModel):
     """Schema for user response (without password)."""
-    id: str
+    id: UUID
     username: str
     email: str
     is_active: bool
     created_at: datetime
+    
+    @field_serializer('id')
+    def serialize_id(self, value: UUID, _info) -> str:
+        """Convert UUID to string for JSON serialization."""
+        return str(value)
     
     class Config:
         from_attributes = True
