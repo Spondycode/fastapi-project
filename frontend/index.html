@@ -11,9 +11,17 @@
     <div class="max-w-7xl mx-auto px-4">
       <div class="flex items-center justify-between h-14">
         <a href="/index.html" class="text-lg font-semibold hover:text-gray-700">FastAPI Gallery</a>
-        <div class="flex gap-4 text-sm">
+        <div id="nav-menu" class="flex gap-4 text-sm items-center">
           <a href="/index.html" class="text-gray-900 font-medium">Home</a>
-          <a href="/upload.html" class="text-gray-600 hover:text-gray-900">Upload</a>
+          
+          <!-- Show when authenticated -->
+          <a href="/upload.html" id="nav-upload" class="text-gray-600 hover:text-gray-900" style="display: none;">Upload</a>
+          <span id="nav-username" class="text-gray-700 font-medium" style="display: none;"></span>
+          <button id="nav-logout" class="text-red-600 hover:text-red-700" style="display: none;">Logout</button>
+          
+          <!-- Show when not authenticated -->
+          <a href="/login.html" id="nav-login" class="text-gray-600 hover:text-gray-900" style="display: none;">Login</a>
+          <a href="/register.html" id="nav-register" class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700" style="display: none;">Register</a>
         </div>
       </div>
     </div>
@@ -46,6 +54,52 @@
     <p>FastAPI Project Gallery</p>
   </footer>
 
+  <script type="module">
+    import { isAuthenticated, getUserData, logout } from '/frontend/js/auth.js';
+    
+    // Update navigation based on auth state
+    function updateNavigation() {
+      const authenticated = isAuthenticated();
+      const userData = getUserData();
+      
+      // Elements
+      const navUpload = document.getElementById('nav-upload');
+      const navUsername = document.getElementById('nav-username');
+      const navLogout = document.getElementById('nav-logout');
+      const navLogin = document.getElementById('nav-login');
+      const navRegister = document.getElementById('nav-register');
+      
+      if (authenticated && userData) {
+        // Show authenticated elements
+        navUpload.style.display = '';
+        navUsername.style.display = '';
+        navUsername.textContent = userData.username;
+        navLogout.style.display = '';
+        
+        // Hide unauthenticated elements
+        navLogin.style.display = 'none';
+        navRegister.style.display = 'none';
+        
+        // Add logout handler
+        navLogout.onclick = (e) => {
+          e.preventDefault();
+          logout();
+        };
+      } else {
+        // Show unauthenticated elements
+        navLogin.style.display = '';
+        navRegister.style.display = '';
+        
+        // Hide authenticated elements
+        navUpload.style.display = 'none';
+        navUsername.style.display = 'none';
+        navLogout.style.display = 'none';
+      }
+    }
+    
+    // Update navigation on page load
+    updateNavigation();
+  </script>
   <script type="module" src="/frontend/js/gallery.js"></script>
 </body>
 </html>

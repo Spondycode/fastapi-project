@@ -1,5 +1,6 @@
 // frontend/js/post.js
 import { getItem, deleteItem, updateItem, getItemImageUrl } from './api.js';
+import { isAuthenticated, getUserData } from './auth.js';
 
 function $(id) {
   return document.getElementById(id);
@@ -57,6 +58,20 @@ async function init() {
     const item = await getItem(id);
     currentItem = item;
     renderItem(item);
+    
+    // Check if user owns this post and is authenticated
+    const authenticated = isAuthenticated();
+    const userData = getUserData();
+    const canEdit = authenticated && userData && item.user_id && userData.id === item.user_id;
+    
+    // Show/hide edit and delete buttons based on ownership
+    if (canEdit) {
+      editBtn.style.display = '';
+      delBtn.style.display = '';
+    } else {
+      editBtn.style.display = 'none';
+      delBtn.style.display = 'none';
+    }
 
     // Edit button handler
     editBtn.addEventListener('click', () => {
